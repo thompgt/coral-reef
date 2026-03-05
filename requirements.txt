@@ -1,0 +1,8 @@
+fastapi==0.121.3
+uvicorn==0.38.0
+duckdb==1.4.4
+sentence-transformers==5.1.2
+pandas==2.3.2
+tqdm==4.67.1
+pydantic==2.12.4
+torch
