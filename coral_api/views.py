@@ -10,12 +10,50 @@ class SemanticSearchView(APIView):
     Search endpoint that vectorizes the user query and performs 
     cosine similarity search on DuckDB.
     """
+
+    @staticmethod
+    def _error_response(http_status, code, message, details=None):
+        """Return a consistent error payload for all API failures."""
+        return Response(
+            {
+                "error": {
+                    "code": code,
+                    "message": message,
+                    "details": details or {}
+                }
+            },
+            status=http_status
+        )
+
     def get(self, request):
-        query_text = request.query_params.get('q', '')
-        limit = int(request.query_params.get('limit', 10))
+        query_text = request.query_params.get('q', '').strip()
+        limit_raw = request.query_params.get('limit', 10)
 
         if not query_text:
-            return Response({"error": "Query 'q' is required."}, status=status.HTTP_400_BAD_REQUEST)
+            return self._error_response(
+                status.HTTP_400_BAD_REQUEST,
+                "MISSING_QUERY",
+                "Query parameter 'q' is required.",
+                {"parameter": "q"}
+            )
+
+        try:
+            limit = int(limit_raw)
+        except (TypeError, ValueError):
+            return self._error_response(
+                status.HTTP_400_BAD_REQUEST,
+                "INVALID_LIMIT",
+                "Query parameter 'limit' must be an integer.",
+                {"parameter": "limit", "value": str(limit_raw)}
+            )
+
+        if limit < 1 or limit > 100:
+            return self._error_response(
+                status.HTTP_400_BAD_REQUEST,
+                "INVALID_LIMIT_RANGE",
+                "Query parameter 'limit' must be between 1 and 100.",
+                {"parameter": "limit", "value": limit, "min": 1, "max": 100}
+            )
 
         try:
             # 1. Load Singleton Model
@@ -27,7 +65,12 @@ class SemanticSearchView(APIView):
             # 3. Connect to DuckDB
             db_path = "coral_morph.db"
             if not os.path.exists(db_path):
-                return Response({"error": "Database file not found."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                return self._error_response(
+                    status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    "DATABASE_NOT_FOUND",
+                    "Search database file was not found.",
+                    {"path": db_path}
+                )
             
             con = duckdb.connect(db_path)
             
@@ -66,4 +109,9 @@ class SemanticSearchView(APIView):
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return self._error_response(
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                "SEARCH_FAILED",
+                "Unexpected error while processing search request.",
+                {"reason": str(e)}
+            )

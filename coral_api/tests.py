@@ -11,7 +11,17 @@ class SearchApiTestCase(TestCase):
         """Test that an empty query returns a 400 error."""
         response = self.client.get(self.search_url)
         self.assertEqual(response.status_code, 400)
-        self.assertIn("error", response.json())
+        data = response.json()
+        self.assertIn("error", data)
+        self.assertEqual(data["error"]["code"], "MISSING_QUERY")
+        self.assertIn("message", data["error"])
+
+    def test_invalid_limit(self):
+        """Test that non-numeric limit returns a 400 error."""
+        response = self.client.get(self.search_url, {'q': 'blue coral', 'limit': 'abc'})
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertEqual(data["error"]["code"], "INVALID_LIMIT")
 
     def test_valid_search(self):
         """Test that a valid query returns search results."""

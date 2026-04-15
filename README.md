@@ -78,6 +78,21 @@ The UI will be available at `http://localhost:5173`.
 }
 ```
 
+### Error Response Format
+All API errors now return a consistent payload:
+
+```json
+{
+  "error": {
+    "code": "MISSING_QUERY",
+    "message": "Query parameter 'q' is required.",
+    "details": {
+      "parameter": "q"
+    }
+  }
+}
+```
+
 ---
 
 ## 🧪 Testing
