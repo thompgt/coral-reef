@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -54,6 +55,26 @@ MIDDLEWARE = [
 ]
 
 CORS_ALLOW_ALL_ORIGINS = True # For development, we allow all origins
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'coral-search-cache',
+        'TIMEOUT': int(os.getenv('CACHE_DEFAULT_TIMEOUT', '300')),
+        'OPTIONS': {
+            'MAX_ENTRIES': int(os.getenv('CACHE_MAX_ENTRIES', '1000')),
+        },
+    }
+}
+
+REST_FRAMEWORK = {
+    'DEFAULT_THROTTLE_RATES': {
+        'search_anon': os.getenv('SEARCH_ANON_RATE', '60/minute'),
+        'search_user': os.getenv('SEARCH_USER_RATE', '120/minute'),
+    }
+}
+
+SEARCH_CACHE_TTL = int(os.getenv('SEARCH_CACHE_TTL', '300'))
 
 ROOT_URLCONF = 'coral_search_backend.urls'
 

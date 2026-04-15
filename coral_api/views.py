@@ -1,15 +1,28 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
+from django.core.cache import cache
+from django.conf import settings
 import duckdb
 from .model_loader import ModelLoader
 import os
+import hashlib
+
+
+class SearchAnonThrottle(AnonRateThrottle):
+    scope = "search_anon"
+
+
+class SearchUserThrottle(UserRateThrottle):
+    scope = "search_user"
 
 class SemanticSearchView(APIView):
     """
     Search endpoint that vectorizes the user query and performs 
     cosine similarity search on DuckDB.
     """
+    throttle_classes = [SearchAnonThrottle, SearchUserThrottle]
 
     @staticmethod
     def _error_response(http_status, code, message, details=None):
@@ -23,6 +36,20 @@ class SemanticSearchView(APIView):
                 }
             },
             status=http_status
+        )
+
+    @staticmethod
+    def _cache_key(query_text, limit):
+        raw_key = f"{query_text.lower()}|{limit}"
+        digest = hashlib.md5(raw_key.encode("utf-8")).hexdigest()
+        return f"semantic_search:{digest}"
+
+    def throttled(self, request, wait):
+        return self._error_response(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "RATE_LIMIT_EXCEEDED",
+            "Too many search requests. Please try again shortly.",
+            {"wait_seconds": int(wait) if wait else None}
         )
 
     def get(self, request):
@@ -54,6 +81,11 @@ class SemanticSearchView(APIView):
                 "Query parameter 'limit' must be between 1 and 100.",
                 {"parameter": "limit", "value": limit, "min": 1, "max": 100}
             )
+
+        cache_key = self._cache_key(query_text, limit)
+        cached_payload = cache.get(cache_key)
+        if cached_payload:
+            return Response(cached_payload, status=status.HTTP_200_OK)
 
         try:
             # 1. Load Singleton Model
@@ -103,10 +135,13 @@ class SemanticSearchView(APIView):
                     "description": row['description']
                 })
                 
-            return Response({
+            response_payload = {
                 "query": query_text,
                 "results": search_results
-            }, status=status.HTTP_200_OK)
+            }
+            cache_timeout = getattr(settings, "SEARCH_CACHE_TTL", 300)
+            cache.set(cache_key, response_payload, timeout=cache_timeout)
+            return Response(response_payload, status=status.HTTP_200_OK)
 
         except Exception as e:
             return self._error_response(

@@ -93,6 +93,40 @@ All API errors now return a consistent payload:
 }
 ```
 
+### Rate Limiting and Caching
+The search API includes built-in request throttling and response caching.
+
+- Rate limiting:
+  - Anonymous clients: `60/minute` (default)
+  - Authenticated clients: `120/minute` (default)
+- Search response cache:
+  - Cached by `(query, limit)` key
+  - Default TTL: `300` seconds
+
+You can tune these values with environment variables:
+
+```bash
+SEARCH_ANON_RATE=60/minute
+SEARCH_USER_RATE=120/minute
+SEARCH_CACHE_TTL=300
+CACHE_DEFAULT_TIMEOUT=300
+CACHE_MAX_ENTRIES=1000
+```
+
+When throttled, the API returns:
+
+```json
+{
+  "error": {
+    "code": "RATE_LIMIT_EXCEEDED",
+    "message": "Too many search requests. Please try again shortly.",
+    "details": {
+      "wait_seconds": 12
+    }
+  }
+}
+```
+
 ---
 
 ## 🧪 Testing
