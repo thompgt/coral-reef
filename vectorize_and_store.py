@@ -1,11 +1,12 @@
 import pandas as pd
-import duckdb
-from sentence_transformers import SentenceTransformer
 import os
 import time
+from sentence_transformers import SentenceTransformer
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, VectorParams, PointStruct
 
-def vectorize_and_store(input_path="cleaned_coral_data.parquet", db_path="coral_morph.db"):
-    print(f"🚀 Starting Vectorization & Storage Pipeline...")
+def vectorize_and_store(input_path="cleaned_coral_data.parquet"):
+    print(f"🚀 Starting Vectorization & Storage Pipeline for Qdrant...")
     
     if not os.path.exists(input_path):
         print(f"❌ Error: {input_path} not found. Please run data_preparation.py first.")
@@ -16,54 +17,53 @@ def vectorize_and_store(input_path="cleaned_coral_data.parquet", db_path="coral_
     df = pd.read_parquet(input_path)
     
     # 2. Initialize Sentence Transformer
-    # Using 'all-MiniLM-L6-v2' for a balance of speed and performance on CPU
     print("🧠 Loading Sentence-Transformer model (all-MiniLM-L6-v2)...")
     model = SentenceTransformer('all-MiniLM-L6-v2')
     
     # 3. Generate Embeddings
-    print(f"⚡ Generating embeddings for {len(df)} species (this may take a moment)...")
+    print(f"⚡ Generating embeddings for {len(df)} species...")
     start_time = time.time()
-    
-    # model.encode returns a numpy array
     embeddings = model.encode(df['search_text'].tolist(), show_progress_bar=True)
-    
-    # Convert embeddings to a list of lists for DuckDB compatibility
-    df['embedding'] = embeddings.tolist()
-    
     duration = time.time() - start_time
     print(f"✅ Vectorization complete in {duration:.2f} seconds.")
 
-    # 4. DuckDB Persistence
-    print(f"💾 Connecting to DuckDB: {db_path}")
-    con = duckdb.connect(db_path)
+    # 4. Qdrant Persistence
+    host = os.getenv("QDRANT_HOST", "localhost")
+    port = int(os.getenv("QDRANT_PORT", 6333))
+    print(f"💾 Connecting to Qdrant at {host}:{port}...")
+    client = QdrantClient(host=host, port=port)
     
-    # Create the table schema
-    # We include all metadata columns plus the vector embedding
-    con.execute("DROP TABLE IF EXISTS corals")
-    con.execute("""
-        CREATE TABLE corals (
-            species_name VARCHAR,
-            description TEXT,
-            color VARCHAR,
-            habitat VARCHAR,
-            abundance VARCHAR,
-            description_length INTEGER,
-            search_text TEXT,
-            primary_habitat VARCHAR,
-            normalized_desc_length DOUBLE,
-            embedding FLOAT[]
+    collection_name = "corals"
+    
+    # Recreate the collection (drops if exists)
+    client.recreate_collection(
+        collection_name=collection_name,
+        vectors_config=VectorParams(size=384, distance=Distance.COSINE),
+    )
+    
+    print(f"📥 Preparing points for upsert into '{collection_name}' collection...")
+    points = []
+    for idx, row in df.iterrows():
+        # Metadata payload (all columns except the one we might have added for internal use)
+        payload = row.to_dict()
+        
+        points.append(PointStruct(
+            id=idx,
+            vector=embeddings[idx].tolist(),
+            payload=payload
         )
-    """)
+    )
     
-    # Insert data from the pandas DataFrame
-    print("📥 Inserting data into 'corals' table...")
-    con.append('corals', df)
+    # Batch upsert
+    client.upsert(
+        collection_name=collection_name,
+        wait=True,
+        points=points
+    )
     
-    # 5. Verify and Index
-    count = con.execute("SELECT count(*) FROM corals").fetchone()[0]
-    print(f"✨ Successfully stored {count} records in {db_path}.")
-    
-    con.close()
+    # 5. Verification
+    collection_info = client.get_collection(collection_name=collection_name)
+    print(f"✨ Successfully stored {collection_info.points_count} records in Qdrant.")
     print("🏁 Pipeline finished successfully!")
 
 if __name__ == "__main__":
