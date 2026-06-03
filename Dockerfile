@@ -25,8 +25,8 @@ RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTr
 # Copy project files
 COPY . .
 
-# Expose Django port
+# Expose FastAPI port
 EXPOSE 8000
 
-# Start the application (Django by default)
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+# Start the application (FastAPI)
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
