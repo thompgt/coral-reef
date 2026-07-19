@@ -2,6 +2,24 @@
 
 A semantic search engine for marine researchers to find coral species using natural language descriptions (e.g., "spiky green branches in shallow water").
 
+## 📓 Live Demo (Jupyter Notebook)
+
+`Demo.ipynb` is a self-contained, runnable walkthrough of the whole project — no Qdrant/DuckDB server required. It loads the real `Coral_reef_data.csv`, embeds every species with the actual `all-MiniLM-L6-v2` production model, and runs genuine cosine-similarity search against those embeddings (mathematically identical to what Qdrant/DuckDB compute, just without the extra infrastructure). It includes:
+
+- EDA over the raw dataset (description lengths, habitats, color terms).
+- Real semantic search vs. a TF-IDF lexical baseline, compared side by side.
+- A **live, interactive search widget** (`ipywidgets`) you can type queries into.
+- A 2D PCA visualization of the embedding space (Plotly), colored by habitat.
+- K-means clustering of species by embedding, and a "species similar to X" nearest-neighbor explorer.
+- A latency benchmark against the PRD's sub-second search goal.
+- A `main.py`-style API response simulation, plus an automated validation suite mirroring `e2e_test.py`.
+
+To run it:
+```bash
+pip install -r requirements.txt scikit-learn matplotlib plotly ipywidgets jupyter
+jupyter notebook Demo.ipynb
+```
+
 ## 🚀 Tech Stack
 - **Backend:** Django + Django Rest Framework
 - **Database:** DuckDB (Persistent vector storage)
